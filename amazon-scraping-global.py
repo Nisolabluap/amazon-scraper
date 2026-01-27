@@ -33,7 +33,7 @@ host = "213.133.105.210"
 port = 22
 username = "qsqfbm_96"
 password = "bH9EqckjfuJ16zKM"  # or use key_file
-remote_path = "/ECDRivals/links.csv"
+remote_path = "/ECDRivals/links_automated.csv"
 
 # Stop flag file on VPS
 STOP_FLAG_FILE = "/root/scraper_stop.flag"
