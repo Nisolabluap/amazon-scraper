@@ -119,11 +119,15 @@ def amazon_blocked(driver):
 
 # ---------- SCRAPER ----------
 def start_scrape():
+    print("=== Starting Amazon Scraper ===")
+    print(f"Loading CSV from {csv_url} ...")
     blocked = False
     rows_to_update, header = load_csv()
+    print(f"CSV loaded, {len(rows_to_update)} rows found.")
     now = datetime.now()
     scraped_cache = {}
-
+    
+    print("Starting headless Chrome...")
     # Chrome headless setup
     options = uc.ChromeOptions()
     options.add_argument("--headless=new")
@@ -132,8 +136,10 @@ def start_scrape():
     options.add_argument("--window-size=1920,1080")
     driver = uc.Chrome(options=options)
     wait = WebDriverWait(driver, 10)
+    print("Chrome started.")
 
     # ---------- AMAZON PREP ----------
+    print("Preparing Amazon site (postal code, currency, language)...")
     try:
         driver.get("https://www.amazon.de")
         time.sleep(1)
@@ -326,6 +332,7 @@ def start_scrape():
                 row[k] = v
 
     save_csv_to_sftp(rows_to_update, header)
+    print(f"Scraping finished. CSV saved. {len(rows_to_update)} rows updated.")
 
     if stop_requested():
         logging.info("Scrape stopped by user. CSV saved.")
