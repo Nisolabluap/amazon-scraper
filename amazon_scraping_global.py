@@ -1,3 +1,12 @@
+# ---------- DISTUTILS SHIM FOR PYTHON 3.12+ ----------
+try:
+    import distutils
+except ModuleNotFoundError:
+    # Redirect to setuptools._distutils
+    import setuptools._distutils as distutils
+    import sys
+    sys.modules['distutils'] = distutils
+
 import csv
 import time
 import re
