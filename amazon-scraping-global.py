@@ -334,6 +334,14 @@ def start_scrape():
             scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
             continue
 
+        # ---------- PERIODIC SAVE ----------
+        if idx % 50 == 0:
+            p(f"Checkpoint save at row {idx}")
+            try:
+                save_csv_to_sftp(rows_to_update, header)
+            except Exception as e:
+                p(f"Checkpoint save failed: {e}")
+
     p("Closing Chrome")
     driver.quit()
 
@@ -344,3 +352,4 @@ def start_scrape():
 # ---------- RUN SCRAPER ----------
 if __name__ == "__main__":
     start_scrape()
+
