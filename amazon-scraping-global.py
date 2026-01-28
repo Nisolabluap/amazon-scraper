@@ -30,7 +30,7 @@ def p(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 # ---------- CONFIG ----------
-csv_url = "http://4s10829.de.dedi4281.your-server.de/Marketplace-Check/ECDRivals/links_test.csv"
+csv_url = "http://4s10829.de.dedi4281.your-server.de/Marketplace-Check/ECDRivals/links.csv"
 
 host = "213.133.105.210"
 port = 22
@@ -352,4 +352,5 @@ def start_scrape():
 # ---------- RUN SCRAPER ----------
 if __name__ == "__main__":
     start_scrape()
+
 
