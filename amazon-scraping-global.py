@@ -26,7 +26,7 @@ import logging
 from threading import Thread
 
 # ---------- CONFIG ----------
-csv_url = "http://4s10829.de.dedi4281.your-server.de/Marketplace-Check/ECDRivals/links.csv"
+csv_url = "http://4s10829.de.dedi4281.your-server.de/Marketplace-Check/ECDRivals/links_test.csv"
 
 # SFTP / SSH connection info
 host = "213.133.105.210"
@@ -346,3 +346,4 @@ def start_scrape():
 # ---------- RUN SCRAPER ----------
 if __name__ == "__main__":
     start_scrape()
+
