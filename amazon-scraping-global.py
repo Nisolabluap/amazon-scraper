@@ -25,20 +25,21 @@ import os
 import logging
 from threading import Thread
 
+# ---------- PRINT HELPER ----------
+def p(msg):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
+
 # ---------- CONFIG ----------
 csv_url = "http://4s10829.de.dedi4281.your-server.de/Marketplace-Check/ECDRivals/links_test.csv"
 
-# SFTP / SSH connection info
 host = "213.133.105.210"
 port = 22
 username = "qsqfbm_96"
-password = "bH9EqckjfuJ16zKM"  # or use key_file
+password = "bH9EqckjfuJ16zKM"
 remote_path = "/ECDRivals/links_automated.csv"
 
-# Stop flag file on VPS
 STOP_FLAG_FILE = "/root/scraper_stop.flag"
 
-# Logging
 logging.basicConfig(
     filename="scraper.log",
     level=logging.INFO,
@@ -47,6 +48,7 @@ logging.basicConfig(
 
 # ---------- LOAD CSV ----------
 def load_csv():
+    p("Loading CSV")
     response = requests.get(csv_url)
     response.raise_for_status()
     csv_file = StringIO(response.text)
@@ -54,16 +56,18 @@ def load_csv():
     rows = []
     header = reader.fieldnames
     for r in reader:
-        r["SkippedReason"] = ""  # initialize
+        r["SkippedReason"] = ""
         rows.append(r)
     if "SkippedReason" not in header:
         header.append("SkippedReason")
     if "Timestamp" not in header:
         header.append("Timestamp")
+    p(f"CSV loaded: {len(rows)} rows")
     return rows, header
 
 # ---------- SAVE CSV ----------
 def save_csv_to_sftp(rows, header):
+    p("Saving CSV to SFTP")
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=header, delimiter=";")
     writer.writeheader()
@@ -79,7 +83,7 @@ def save_csv_to_sftp(rows, header):
         f.write(csv_data)
     sftp.close()
     transport.close()
-    logging.info("CSV saved back to SFTP successfully.")
+    p("CSV saved back to SFTP")
 
 # ---------- STOP FLAG ----------
 def stop_requested():
@@ -119,16 +123,15 @@ def amazon_blocked(driver):
 
 # ---------- SCRAPER ----------
 def start_scrape():
-    print("=== Starting Amazon Scraper ===")
-    print(f"Loading CSV from {csv_url} ...")
+    p("=== Starting Amazon Scraper ===")
+    p(f"Loading CSV from {csv_url}")
+
     blocked = False
     rows_to_update, header = load_csv()
-    print(f"CSV loaded, {len(rows_to_update)} rows found.")
     now = datetime.now()
     scraped_cache = {}
-    
-    print("Starting headless Chrome...")
-    # Chrome headless setup
+
+    p("Starting headless Chrome")
     options = uc.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -136,10 +139,10 @@ def start_scrape():
     options.add_argument("--window-size=1920,1080")
     driver = uc.Chrome(options=options)
     wait = WebDriverWait(driver, 10)
-    print("Chrome started.")
+    p("Chrome started")
 
     # ---------- AMAZON PREP ----------
-    print("Preparing Amazon site (postal code, currency, language)...")
+    p("Preparing Amazon site")
     try:
         driver.get("https://www.amazon.de")
         time.sleep(1)
@@ -148,7 +151,6 @@ def start_scrape():
         try: driver.find_element(By.ID, "sp-cc-accept").click()
         except NoSuchElementException: pass
 
-        # Postal code
         try:
             wait.until(EC.element_to_be_clickable((By.ID, "glow-ingress-block"))).click()
             postal_input = wait.until(EC.presence_of_element_located((By.ID, "GLUXZipUpdateInput")))
@@ -160,7 +162,6 @@ def start_scrape():
             except: pass
         except: pass
 
-        # Currency & language
         try:
             driver.get(
                 "https://www.amazon.de/customer-preferences/edit?"
@@ -168,7 +169,9 @@ def start_scrape():
             )
             time.sleep(2)
             try:
-                german_label = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'div[data-a-input-name="lop"] label')))
+                german_label = wait.until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, 'div[data-a-input-name="lop"] label'))
+                )
                 german_label.click()
             except: pass
             dropdown = wait.until(EC.presence_of_element_located((By.ID, "icp-currency-dropdown")))
@@ -180,84 +183,98 @@ def start_scrape():
     except Exception as e:
         logging.warning(f"Amazon prep failed: {e}")
 
+    total = len(rows_to_update)
+
     # ---------- MAIN SCRAPE LOOP ----------
-    for row in rows_to_update:
+    for idx, row in enumerate(rows_to_update, start=1):
+        p(f"Processing row {idx}/{total}")
+
         url = row.get("Link", "").strip()
+        p(f"URL: {url}")
+
         if not url:
+            p("Empty URL → skipped")
             row["SkippedReason"] = ""
             continue
 
-        # Stop if requested
         if stop_requested():
-            logging.info("Stop flag detected. Exiting after current URL...")
+            p("STOP FLAG detected")
             break
 
-        # Apply cache for duplicates
         if url in scraped_cache:
+            p("Using cached result")
             for k, v in scraped_cache[url].items():
                 row[k] = v
             continue
 
-        # Skip Inventory NA
         if row.get("Inventory", "").strip().upper() == "NA":
+            p("Inventory NA → skipped")
             row["SkippedReason"] = "Inventory NA, skipped."
             scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
             continue
 
-        # Skip <24h
         ts_str = row.get("Timestamp", "")
         if ts_str:
             try:
                 ts = datetime.strptime(ts_str, "%d.%m.%Y %H:%M")
                 if now - ts < timedelta(hours=24):
-                    if row["SkippedReason"]:
-                        row["SkippedReason"] += " | Scraped <24h ago."
-                    else:
-                        row["SkippedReason"] = "Scraped <24h ago."
+                    p("Scraped <24h ago → skipped")
+                    row["SkippedReason"] = "Scraped <24h ago."
                     scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
                     continue
             except: pass
 
-        # ---------- ASIN ----------
         original_asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', url)
         if not original_asin_match:
+            p("Invalid ASIN")
             row["SkippedReason"] = "Invalid ASIN in link."
             scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
             continue
+
         original_asin = original_asin_match.group(1)
+        p(f"Original ASIN: {original_asin}")
 
         try:
+            p("Opening product page")
             driver.get(url)
             time.sleep(random.uniform(1, 3))
 
             if amazon_blocked(driver):
+                p("AMAZON BLOCK / CAPTCHA")
                 blocked = True
                 row["SkippedReason"] = "Blocked by Amazon / CAPTCHA."
                 break
 
-            # ASIN redirect
             current_asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', driver.current_url)
             if current_asin_match:
                 current_asin = current_asin_match.group(1)
                 if current_asin != original_asin:
+                    p(f"ASIN redirected {original_asin} → {current_asin}")
                     row["SkippedReason"] = f"{original_asin} redirected to {current_asin}, original ASIN might be OOS."
                     scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
                     continue
             else:
+                p("No ASIN after redirect")
                 row["SkippedReason"] = "No ASIN found after redirect."
                 scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
                 continue
 
-            # Availability
-            try: availability_text = driver.find_element(By.ID, "availability").text.strip().lower()
-            except: availability_text = ""
-            if any(x in availability_text for x in ["derzeit nicht verfügbar","nicht auf lager","currently unavailable","out of stock"]):
+            try:
+                availability_text = driver.find_element(By.ID, "availability").text.strip().lower()
+            except:
+                availability_text = ""
+            p(f"Availability: {availability_text}")
+
+            if any(x in availability_text for x in [
+                "derzeit nicht verfügbar","nicht auf lager",
+                "currently unavailable","out of stock"
+            ]):
+                p("Out of stock")
                 row["SkippedReason"] = "Not in stock."
                 scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
                 continue
-            row["SkippedReason"] = ""
 
-            # BuyBox detection
+            p("Checking BuyBox")
             has_buybox = False
             for bid in ["add-to-cart-button","buy-now-button"]:
                 try:
@@ -265,85 +282,65 @@ def start_scrape():
                         has_buybox = True
                         break
                 except: pass
+
             if not has_buybox:
-                try: driver.find_element(By.ID, "buybox"); has_buybox=True
-                except: pass
-            if not has_buybox:
-                try: driver.find_element(By.ID, "buybox-see-all-buying-choices"); has_buybox=False
-                except: pass
-            if not has_buybox:
-                page_text = driver.page_source.lower()
-                no_buybox_texts = ["no featured offers available", "keine hervorgehobenen angebote verfügbar", "keine hervorgehobenen"]
-                if any(msg in page_text for msg in no_buybox_texts):
-                    row["SkippedReason"] = "No featured offer (Amazon message)."
-                    scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
-                    continue
-            if not has_buybox:
+                p("No BuyBox")
                 row["SkippedReason"] = "No BuyBox / not purchasable."
                 scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
                 continue
 
-            # Title
+            p("Extracting data")
+
             try: row["Title"] = driver.find_element(By.ID, "title").text
             except: row["Title"] = ""
 
-            # Price
             try:
-                price_el = driver.execute_script('return document.querySelector("#corePriceDisplay_desktop_feature_div span.aok-offscreen")')
+                price_el = driver.execute_script(
+                    'return document.querySelector("#corePriceDisplay_desktop_feature_div span.aok-offscreen")'
+                )
                 raw_price = driver.execute_script("return arguments[0].textContent.trim()", price_el)
                 row["Price"] = raw_price.replace("€","").replace("EUR","").replace("\u00a0","").strip()
             except: row["Price"] = "0"
 
-            # Shipping
             try:
-                ship_el = driver.execute_script('return document.querySelector("#mir-layout-DELIVERY_BLOCK span[data-csa-c-delivery-price]")')
+                ship_el = driver.execute_script(
+                    'return document.querySelector("#mir-layout-DELIVERY_BLOCK span[data-csa-c-delivery-price]")'
+                )
                 shipping_price = "0"
                 if ship_el:
-                    raw_ship = driver.execute_script("return arguments[0].getAttribute('data-csa-c-delivery-price')", ship_el)
+                    raw_ship = driver.execute_script(
+                        "return arguments[0].getAttribute('data-csa-c-delivery-price')", ship_el
+                    )
                     if raw_ship:
                         shipping_price = raw_ship.replace("€","").replace("EUR","").replace("\u00a0","").strip()
-                    else:
-                        raw_ship = driver.execute_script("return arguments[0].textContent.trim()", ship_el)
-                        match = re.search(r"(\d+,\d+)", raw_ship)
-                        if match: shipping_price = match.group(1)
                 row["Shipping"] = shipping_price
             except: row["Shipping"] = "0"
 
-            # Image
-            try: row["Image"] = driver.find_element(By.ID, "imgTagWrapperId").find_element(By.TAG_NAME,"img").get_attribute("src")
+            try:
+                row["Image"] = driver.find_element(By.ID, "imgTagWrapperId") \
+                    .find_element(By.TAG_NAME,"img").get_attribute("src")
             except: row["Image"] = ""
 
             row["Timestamp"] = datetime.now().strftime("%d.%m.%Y %H:%M")
-            scraped_cache[url] = {k: row[k] for k in ["Title","Price","Shipping","Image","Timestamp","SkippedReason"]}
+            scraped_cache[url] = {
+                k: row[k] for k in ["Title","Price","Shipping","Image","Timestamp","SkippedReason"]
+            }
+
+            p("Row scraped OK")
 
         except Exception as e:
+            p(f"ERROR: {e}")
             row["SkippedReason"] = f"Error: {e}"
             scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
             continue
 
-    # ---------- FINALLY ----------
+    p("Closing Chrome")
     driver.quit()
 
-    # Apply cache for duplicates
-    for row in rows_to_update:
-        url = row.get("Link", "").strip()
-        if url in scraped_cache:
-            for k, v in scraped_cache[url].items():
-                row[k] = v
-
     save_csv_to_sftp(rows_to_update, header)
-    print(f"Scraping finished. CSV saved. {len(rows_to_update)} rows updated.")
 
-    if stop_requested():
-        logging.info("Scrape stopped by user. CSV saved.")
-    elif blocked:
-        logging.info("Amazon block detected! CSV saved.")
-    else:
-        logging.info("Scrape finished. CSV saved.")
-
-    print(f"CSV saved. {len(rows_to_update)} rows updated.")
+    p("Scraping finished")
 
 # ---------- RUN SCRAPER ----------
 if __name__ == "__main__":
     start_scrape()
-
