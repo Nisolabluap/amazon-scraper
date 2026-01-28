@@ -243,7 +243,7 @@ def start_scrape():
                 p("AMAZON BLOCK / CAPTCHA")
                 blocked = True
                 row["SkippedReason"] = "Blocked by Amazon / CAPTCHA."
-                break
+                continue
 
             current_asin_match = re.search(r'/(?:dp|gp/product)/([A-Z0-9]{10})', driver.current_url)
             if current_asin_match:
@@ -352,5 +352,6 @@ def start_scrape():
 # ---------- RUN SCRAPER ----------
 if __name__ == "__main__":
     start_scrape()
+
 
 
