@@ -27,14 +27,21 @@ from threading import Thread
 import subprocess
 
 def get_chrome_major_version():
-    output = subprocess.check_output(
-        r'reg query "HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon" /v version',
-        shell=True
-    ).decode()
-    version = re.search(r'\d+\.\d+\.\d+\.\d+', output).group()
-    return int(version.split('.')[0])
+    import subprocess, re
+
+    candidates = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
+    for binary in candidates:
+        try:
+            output = subprocess.check_output([binary, "--version"], stderr=subprocess.DEVNULL).decode()
+            match = re.search(r"\d+\.\d+\.\d+\.\d+", output)
+            if match:
+                return int(match.group().split(".")[0])
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+    raise RuntimeError("No Chrome/Chromium binary found")
 
 chrome_major = get_chrome_major_version()
+print(f"Detected Chrome major version: {chrome_major}")
 
 # ---------- PRINT HELPER ----------
 def p(msg):
@@ -367,6 +374,7 @@ def start_scrape():
 # ---------- RUN SCRAPER ----------
 if __name__ == "__main__":
     start_scrape()
+
 
 
 
