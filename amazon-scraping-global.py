@@ -293,7 +293,8 @@ def start_scrape():
             ]):
                 p("Out of stock")
                 row["SkippedReason"] = "Not in stock."
-                scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
+                row["Timestamp"] = datetime.now().strftime("%d.%m.%Y %H:%M")
+                scraped_cache[url] = {"SkippedReason": row["SkippedReason"], "Timestamp": row["Timestamp"]}
                 continue
 
             p("Checking BuyBox")
@@ -374,6 +375,7 @@ def start_scrape():
 # ---------- RUN SCRAPER ----------
 if __name__ == "__main__":
     start_scrape()
+
 
 
 
