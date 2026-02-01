@@ -24,6 +24,17 @@ import undetected_chromedriver as uc
 import os
 import logging
 from threading import Thread
+import subprocess
+
+def get_chrome_major_version():
+    output = subprocess.check_output(
+        r'reg query "HKEY_CURRENT_USER\Software\Google\Chrome\BLBeacon" /v version',
+        shell=True
+    ).decode()
+    version = re.search(r'\d+\.\d+\.\d+\.\d+', output).group()
+    return int(version.split('.')[0])
+
+chrome_major = get_chrome_major_version()
 
 # ---------- PRINT HELPER ----------
 def p(msg):
@@ -137,7 +148,11 @@ def start_scrape():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
-    driver = uc.Chrome(options=options)
+    driver = uc.Chrome(
+        options=options,
+        version_main=chrome_major,
+        use_subprocess=True
+    )
     wait = WebDriverWait(driver, 10)
     p("Chrome started")
 
@@ -352,6 +367,7 @@ def start_scrape():
 # ---------- RUN SCRAPER ----------
 if __name__ == "__main__":
     start_scrape()
+
 
 
 
