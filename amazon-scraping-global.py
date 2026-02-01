@@ -250,7 +250,8 @@ def start_scrape():
         if not original_asin_match:
             p("Invalid ASIN")
             row["SkippedReason"] = "Invalid ASIN in link."
-            scraped_cache[url] = {"SkippedReason": row["SkippedReason"]}
+            row["Timestamp"] = datetime.now().strftime("%d.%m.%Y %H:%M")
+            scraped_cache[url] = {"SkippedReason": row["SkippedReason"], "Timestamp": row["Timestamp"]}
             continue
 
         original_asin = original_asin_match.group(1)
@@ -375,6 +376,7 @@ def start_scrape():
 # ---------- RUN SCRAPER ----------
 if __name__ == "__main__":
     start_scrape()
+
 
 
 
