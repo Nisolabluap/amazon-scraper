@@ -209,6 +209,31 @@ def start_scrape():
 
     # ---------- MAIN SCRAPE LOOP ----------
     for idx, row in enumerate(rows_to_update, start=1):
+        MAX_PAGES_PER_CHROME = 20  # restart Chrome every 20 pages
+
+        # ---------- RESTART CHROME PERIODICALLY ----------
+        if idx % MAX_PAGES_PER_CHROME == 1:
+            try:
+                driver.quit()
+                p(f"[{datetime.now().strftime('%H:%M:%S')}] Chrome restarted at page {idx}")
+            except NameError:
+                pass  # first iteration, driver doesn't exist yet
+        
+            # Recreate driver
+            p("Starting headless Chrome")
+            options = uc.ChromeOptions()
+            options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--window-size=1920,1080")
+            driver = uc.Chrome(
+                options=options,
+                version_main=chrome_major,
+                use_subprocess=True
+            )
+            wait = WebDriverWait(driver, 10)
+            p("Chrome started")
+
         p(f"Processing row {idx}/{total}")
 
         url = row.get("Link", "").strip()
@@ -376,6 +401,7 @@ def start_scrape():
 # ---------- RUN SCRAPER ----------
 if __name__ == "__main__":
     start_scrape()
+
 
 
 
